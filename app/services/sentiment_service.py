@@ -39,7 +39,7 @@ def analyze_sentiment_and_emotion(text: str) -> dict:
 Text: "{str(text)[:300]}"""
 
         response = client.chat.completions.create(
-            model="llama-3.1-8b-instant",
+            model=settings.GROQ_MODEL,
             messages=[{"role": "user", "content": prompt}],
             response_format={"type": "json_object"},
             temperature=0.1

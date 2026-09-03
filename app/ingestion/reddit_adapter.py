@@ -32,6 +32,12 @@ class RedditAdapter(BaseSocialAdapter):
             title = entry.get("title", "")
             author_obj = entry.get("author", {})
             author_name = author_obj.get("name", "/u/anonymous").replace("/u/", "")
+            reply_ref = entry.get("thr:in-reply-to", {})
+            parent_ref = reply_ref.get("@ref") if isinstance(reply_ref, dict) else reply_ref
+            parent_post_id = None
+            if parent_ref:
+                parent_id = str(parent_ref).rstrip("/").split("/")[-1]
+                parent_post_id = f"reddit_{parent_id}"
             
             # Parse ISO timestamp
             updated_str = entry.get("updated", "")
@@ -50,9 +56,13 @@ class RedditAdapter(BaseSocialAdapter):
                     text=title,
                     language="en",
                     created_at=created_dt,
-                    parent_post_id=None,
+                    parent_post_id=parent_post_id,
                     engagement_count={"likes": 0, "shares": 0, "comments": 0},
-                    raw_data={"subreddit": query, "link": entry.get("link", {}).get("@href", "")}
+                    raw_data={
+                        "source": "reddit_rss",
+                        "subreddit": query,
+                        "link": entry.get("link", {}).get("@href", ""),
+                    }
                 )
             )
         return normalized

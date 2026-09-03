@@ -29,8 +29,8 @@ def generate_mock_posts(count: int = 50) -> list[NormalizedPost]:
         text = random.choice(SAMPLE_TEXTS)
         platform = random.choice(["x", "telegram", "reddit"])
         
-        # Link simulation: some posts reference earlier authors
-        parent_post_id = f"mock_{i-1}" if (i > 0 and random.random() > 0.6) else None
+        # Link simulation: some posts reference the preceding post
+        parent_post_id = posts[-1].platform_post_id if (posts and random.random() > 0.6) else None
 
         post = NormalizedPost(
             platform=platform,

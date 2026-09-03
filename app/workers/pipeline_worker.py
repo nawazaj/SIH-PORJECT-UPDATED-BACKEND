@@ -49,7 +49,17 @@ def run_analytics_pipeline(db: Session, batch_size: int = 50) -> dict:
         db.merge(credibility_entry)
 
         # 3. Extract Edges
-        interactions = extract_network_interactions(post)
+        parent = None
+        if post.parent_post_id:
+            parent = (
+                db.query(Post)
+                .filter(
+                    Post.platform == post.platform,
+                    Post.platform_post_id == post.parent_post_id,
+                )
+                .first()
+            )
+        interactions = extract_network_interactions(post, parent.author_id if parent else None)
         for edge_data in interactions:
             new_edges.append(NetworkEdge(**edge_data))
             

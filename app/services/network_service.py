@@ -4,7 +4,7 @@ from sqlalchemy.orm import Session
 from app.models.post import Post
 from app.models.network import NetworkEdge
 
-def extract_network_interactions(post: Post) -> list[dict]:
+def extract_network_interactions(post: Post, parent_author_id: str | None = None) -> list[dict]:
     interactions = []
     
     # 1. Mention Extraction (@username)
@@ -21,12 +21,10 @@ def extract_network_interactions(post: Post) -> list[dict]:
             })
             
     # 2. Reply Target Extraction (Ignore self-replies)
-    if post.parent_post_id:
-        # Avoid direct self-linking
-        target_author = "usr_news_hub" if post.author_id == "usr_tech_guru" else "usr_tech_guru"
+    if post.parent_post_id and parent_author_id and parent_author_id != post.author_id:
         interactions.append({
             "source_author_id": post.author_id,
-            "target_author_id": target_author,
+            "target_author_id": parent_author_id,
             "platform": post.platform,
             "interaction_type": "reply",
             "created_at": post.created_at

@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException
 from sqlalchemy.orm import Session
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.engine import CursorResult
@@ -10,13 +10,14 @@ from app.ingestion.mock_adapter import generate_mock_posts
 from app.ingestion.reddit_adapter import RedditAdapter
 from app.ingestion.telegram_adapter import TelegramAdapter
 from app.ingestion.x_adapter import XAdapter
+from app.api.v1.analytics import background_pipeline_job
 
 # 1. Initialize the Router First
 router = APIRouter(prefix="/ingest", tags=["Data Ingestion"])
 
 # 2. Mock Ingestion Endpoint
-@router.post("/mock", summary="Generate & insert mock social media posts")
-def ingest_mock_data(count: int = 30, db: Session = Depends(get_db)):
+@router.post("/mock", summary="Generate, insert & analyze mock social media posts")
+def ingest_mock_data(count: int = 30, background_tasks: BackgroundTasks = None, db: Session = Depends(get_db)):
     mock_posts = generate_mock_posts(count=count)
     inserted_count = 0
 
@@ -41,11 +42,13 @@ def ingest_mock_data(count: int = 30, db: Session = Depends(get_db)):
         inserted_count += cast(CursorResult, result).rowcount
 
     db.commit()
-    return {"status": "success", "generated": len(mock_posts), "inserted_new_records": inserted_count}
+    if background_tasks:
+        background_tasks.add_task(background_pipeline_job)
+    return {"status": "success", "generated": len(mock_posts), "inserted_new_records": inserted_count, "analysis": "queued"}
 
 # 3. Live Reddit Ingestion Endpoint
 @router.post("/reddit", summary="Fetch real-time posts from a public Subreddit")
-async def ingest_reddit_data(subreddit: str = "technology", limit: int = 15, db: Session = Depends(get_db)):
+async def ingest_reddit_data(subreddit: str = "technology", limit: int = 15, background_tasks: BackgroundTasks = None, db: Session = Depends(get_db)):
     adapter = RedditAdapter()
     reddit_posts = await adapter.fetch_posts(query=subreddit, limit=limit)
     inserted_count = 0
@@ -71,11 +74,13 @@ async def ingest_reddit_data(subreddit: str = "technology", limit: int = 15, db:
         inserted_count += cast(CursorResult, result).rowcount
 
     db.commit()
-    return {"status": "success", "fetched": len(reddit_posts), "inserted_new_records": inserted_count}
+    if background_tasks:
+        background_tasks.add_task(background_pipeline_job)
+    return {"status": "success", "fetched": len(reddit_posts), "inserted_new_records": inserted_count, "analysis": "queued"}
 
 # 4. Live Telegram Ingestion Endpoint
 @router.post("/telegram", summary="Fetch real-time messages from a public Telegram channel")
-async def ingest_telegram_data(channel: str = "durov", limit: int = 15, db: Session = Depends(get_db)):
+async def ingest_telegram_data(channel: str = "durov", limit: int = 15, background_tasks: BackgroundTasks = None, db: Session = Depends(get_db)):
     adapter = TelegramAdapter()
     tg_posts = await adapter.fetch_posts(query=channel, limit=limit)
     inserted_count = 0
@@ -101,11 +106,13 @@ async def ingest_telegram_data(channel: str = "durov", limit: int = 15, db: Sess
         inserted_count += cast(CursorResult, result).rowcount
 
     db.commit()
-    return {"status": "success", "fetched": len(tg_posts), "inserted_new_records": inserted_count}
+    if background_tasks:
+        background_tasks.add_task(background_pipeline_job)
+    return {"status": "success", "fetched": len(tg_posts), "inserted_new_records": inserted_count, "analysis": "queued"}
 
 # 5. Parallel Batch Live Ingestion Endpoint
 @router.post("/batch-live", summary="Fetch live data across multiple subreddits and Telegram channels simultaneously")
-async def ingest_batch_live(db: Session = Depends(get_db)):
+async def ingest_batch_live(background_tasks: BackgroundTasks = None, db: Session = Depends(get_db)):
     reddit_adapter = RedditAdapter()
     telegram_adapter = TelegramAdapter()
     
@@ -144,17 +151,23 @@ async def ingest_batch_live(db: Session = Depends(get_db)):
         inserted_count += cast(CursorResult, res).rowcount
         
     db.commit()
+    if background_tasks:
+        background_tasks.add_task(background_pipeline_job)
     return {
         "status": "success",
         "total_sources_queried": len(subreddits) + len(channels),
         "total_fetched": len(all_posts),
-        "newly_inserted": inserted_count
+        "newly_inserted": inserted_count,
+        "analysis": "queued"
     }
 
-@router.post("/x", summary="Fetch/stimulate real time posts from X (Twitter)")
-async def ingest_x_data(query: str = "technology", limit: int = 15, db: Session = Depends(get_db)):
+@router.post("/x", summary="Fetch X API posts or use labeled demo data")
+async def ingest_x_data(query: str = "technology", limit: int = 15, background_tasks: BackgroundTasks = None, db: Session = Depends(get_db)):
     adapter = XAdapter()
-    x_posts = await adapter.fetch_posts(query=query, limit=limit)
+    try:
+        x_posts = await adapter.fetch_posts(query=query, limit=limit)
+    except RuntimeError as error:
+        raise HTTPException(status_code=502, detail=str(error)) from error
     inserted_count = 0
 
     for item in x_posts:
@@ -178,5 +191,7 @@ async def ingest_x_data(query: str = "technology", limit: int = 15, db: Session 
         inserted_count += cast(CursorResult, res).rowcount
 
     db.commit()
-    return {"status": "success", "fetched": len(x_posts), "inserted_new_records": inserted_count}
+    if background_tasks:
+        background_tasks.add_task(background_pipeline_job)
+    return {"status": "success", "fetched": len(x_posts), "inserted_new_records": inserted_count, "analysis": "queued"}
         

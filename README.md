@@ -313,6 +313,11 @@ API_V1_STR=/api/v1
 # https://console.groq.com/keys. Without it, the app still runs but every
 # post falls back to a neutral sentiment/emotion default.
 GROQ_API_KEY=gsk_your_key_here
+GROQ_MODEL=qwen/qwen3.6-27b
+
+# X API v2 bearer token. Keep this in the backend environment only.
+X_BEARER_TOKEN=your_x_bearer_token_here
+X_DEMO_FALLBACK=true
 ```
 
 ---
